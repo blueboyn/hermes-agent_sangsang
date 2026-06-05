@@ -8,12 +8,12 @@
 
 
 ## 파일 목록
-
 ```
 hybrid/
 ├── README.md
 ├── ARCHITECTURE.md
 ├── CONCEPT_KR.md
+├── IMPLEMENTATION_STATUS.md
 ├── requirements.txt
 ├── chiron/__init__.py
 ├── chiron/config.py
@@ -24,6 +24,7 @@ hybrid/
 ├── chiron/corrector.py
 ├── chiron/emergence.py
 ├── chiron/promotion.py
+├── chiron/reconciler.py
 ├── chiron/curator.py
 ├── chiron/orchestrator.py
 ├── examples/demo.py
@@ -35,20 +36,22 @@ hybrid/
 1. [`README.md`](#1-readmemd)
 2. [`ARCHITECTURE.md`](#2-architecturemd)
 3. [`CONCEPT_KR.md`](#3-conceptkrmd)
-4. [`requirements.txt`](#4-requirementstxt)
-5. [`chiron/__init__.py`](#5-chironinitpy)
-6. [`chiron/config.py`](#6-chironconfigpy)
-7. [`chiron/store.py`](#7-chironstorepy)
-8. [`chiron/llm.py`](#8-chironllmpy)
-9. [`chiron/metacognition.py`](#9-chironmetacognitionpy)
-10. [`chiron/evolution.py`](#10-chironevolutionpy)
-11. [`chiron/corrector.py`](#11-chironcorrectorpy)
-12. [`chiron/emergence.py`](#12-chironemergencepy)
-13. [`chiron/promotion.py`](#13-chironpromotionpy)
-14. [`chiron/curator.py`](#14-chironcuratorpy)
-15. [`chiron/orchestrator.py`](#15-chironorchestratorpy)
-16. [`examples/demo.py`](#16-examplesdemopy)
-17. [`tests/test_smoke.py`](#17-teststestsmokepy)
+4. [`IMPLEMENTATION_STATUS.md`](#4-implementationstatusmd)
+5. [`requirements.txt`](#5-requirementstxt)
+6. [`chiron/__init__.py`](#6-chironinitpy)
+7. [`chiron/config.py`](#7-chironconfigpy)
+8. [`chiron/store.py`](#8-chironstorepy)
+9. [`chiron/llm.py`](#9-chironllmpy)
+10. [`chiron/metacognition.py`](#10-chironmetacognitionpy)
+11. [`chiron/evolution.py`](#11-chironevolutionpy)
+12. [`chiron/corrector.py`](#12-chironcorrectorpy)
+13. [`chiron/emergence.py`](#13-chironemergencepy)
+14. [`chiron/promotion.py`](#14-chironpromotionpy)
+15. [`chiron/reconciler.py`](#15-chironreconcilerpy)
+16. [`chiron/curator.py`](#16-chironcuratorpy)
+17. [`chiron/orchestrator.py`](#17-chironorchestratorpy)
+18. [`examples/demo.py`](#18-examplesdemopy)
+19. [`tests/test_smoke.py`](#19-teststestsmokepy)
 
 ---
 
@@ -430,7 +433,68 @@ hybrid/
 
 ---
 
-## 4. `requirements.txt`
+## 4. `IMPLEMENTATION_STATUS.md`
+
+````markdown
+# Chiron 구현 현황 (분석서 대비)
+
+외부 코드 리뷰(`Chiron 분석서 & 실행 계획`, 2026-06-05)의 결함 6건과 Phase 계획에
+대한 실제 구현 진행 상황. 진단은 전부 타당했고, 그에 맞춰 단계적으로 반영 중.
+
+## 결함별 상태
+
+| ID | 결함 | 심각도 | 상태 | 조치 |
+|----|------|:---:|:---:|------|
+| D-3 | 강등 경로 + skill↔edge 링크 부재 | 🔴 | ✅ **완료** | `skill_edges` 정션 테이블 + `Reconciler` (지식 변화 시 철회) |
+| D-5 | 스킬 자기소멸(소비 신호 부재) | 🟠 | ✅ **가드 완료** | curator가 미소비 promoted 스킬을 idle-archive에서 제외. 실제 소비 채널은 Phase 4 |
+| D-6 | 데모 게이트 시연이 연극 | 🟡 | ✅ **완료** | PHASE 3에 stub 하드코딩임을 명시하는 정직한 라벨 추가 |
+| D-2 | 검증 게이트 확증편향 | 🔴 | ⏳ Phase 2 | PMI 독립 prior + 추출/검증 모델 분리 (예정) |
+| D-4 | confidence 의미 혼용 | 🟠 | ⏳ Phase 2 | conf 3필드 분리(extract/path/verify) (예정) |
+| D-1 | "반복" 미구현 | 🔴 | ⏳ Phase 3 | `recurrence` 카운터 + 승격 조건 추가 (예정) |
+
+## Phase 0 — 기반 (완료)
+
+- **`skill_edges` 테이블** (`store.py`): `(skill_id, edge_id, role, created_turn)`.
+  역추적/의존성 조회 API: `skill_support_edge_ids`, `skills_depending_on`,
+  `edge_status`, `link_skill_edge`, `clear_skill_edges`.
+- **승격 시 링크 기록** (`promotion.py`): 사슬의 각 엣지를 `head`/`support` 역할로
+  연결. 재승격 시 현재 사슬과 일치하도록 링크를 새로 고침.
+- **정직한 데모 라벨** (`demo.py` PHASE 3, D-6).
+- 회귀 테스트: `test_skill_has_edge_provenance`.
+
+## Phase 1 — 강등/조정 루프 (완료)
+
+- **`Reconciler`** (`reconciler.py`): 근거 엣지의 live(validated) 수가
+  `promote_min_validated_edges` 미만으로 떨어진 파생 스킬을 **철회(archive)**.
+  삭제 아님 — origin 보존, `validations`에 `retraction` 사유 기록, 복구 가능.
+- **orchestrator 통합**: `evolve()`에서 promote 직후·curator 직전에 `reconcile()`
+  실행(철회된 지식이 umbrella로 통합되지 않도록).
+- **D-5 가드** (`curator.py`): 한 번도 소비되지 않은 `origin='promoted'` 스킬은
+  idle 기반 stale/archive 대상에서 제외. (지식 변화에 의한 철회는 Reconciler가 담당.)
+- **출처 링크 전파** (`curator.py`): 통합 시 흡수된 형제의 근거 엣지를 umbrella에
+  이어 붙여, Reconciler가 통합된 스킬도 철회할 수 있게 함.
+- 회귀 테스트: `test_retraction_archives_skill`,
+  `test_promoted_skill_not_idle_archived_without_use`,
+  `test_non_derived_skill_survives_reconcile`.
+
+## 검증
+
+- 스모크 테스트 **9/9 통과** (기존 5 + 신규 4).
+- 오프라인 데모: PHASE 5에서 근거 엣지를 뒤집자 `knowledge-umbrella`가 자동 철회되고
+  복구 가능한 archived 상태로 전이됨을 실증.
+
+## 다음 (미착수)
+
+- **Phase 2** (무결성): D-2 PMI 독립 prior(상상이 wordrelation 자산 확인 선행) +
+  추출≠검증 모델 분리, D-4 conf 3필드 분리.
+- **Phase 3** ("반복"): D-1 recurrence 게이트.
+- **Phase 4** (본체 접합): 실 LLM/수집기/Neo4j/소비 채널 — *이 환경 밖, 본체 인프라
+  필요*. 인터페이스(store 백엔드 추상화, 소비 채널 훅)까지만 여기서 준비.
+````
+
+---
+
+## 5. `requirements.txt`
 
 ````text
 # Chiron은 파이썬 표준 라이브러리만으로 동작한다 (sqlite3, dataclasses, ...).
@@ -445,7 +509,7 @@ hybrid/
 
 ---
 
-## 5. `chiron/__init__.py`
+## 6. `chiron/__init__.py`
 
 ````python
 """Chiron — 하이브리드 자가 진화 엔진.
@@ -472,7 +536,7 @@ __version__ = "0.1.0"
 
 ---
 
-## 6. `chiron/config.py`
+## 7. `chiron/config.py`
 
 ````python
 """Chiron의 중앙 설정.
@@ -534,7 +598,7 @@ class Config:
 
 ---
 
-## 7. `chiron/store.py`
+## 8. `chiron/store.py`
 
 ````python
 """통합 저장소: *선언적 지식*(agi 방식)과 *절차적 스킬*(hermes 방식)이 출처
@@ -609,6 +673,13 @@ CREATE TABLE IF NOT EXISTS skills (
     uses INTEGER NOT NULL DEFAULT 0,
     last_used_turn INTEGER NOT NULL DEFAULT 0,
     created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS skill_edges (
+    skill_id INTEGER NOT NULL,
+    edge_id INTEGER NOT NULL,
+    role TEXT NOT NULL DEFAULT 'support',   -- 근거|머리  (support|head)
+    created_turn INTEGER NOT NULL,
+    PRIMARY KEY (skill_id, edge_id)
 );
 CREATE TABLE IF NOT EXISTS validations (
     id INTEGER PRIMARY KEY,
@@ -706,6 +777,10 @@ class Store:
                 WHERE ns.name=? {clause}""", (name,)).fetchall()
         return [Edge(r["id"], r["src"], r["dst"], r["relation"], r["strength"],
                      r["confidence"], r["status"], r["origin"]) for r in rows]
+
+    def edge_status(self, edge_id: int) -> str | None:
+        row = self.db.execute("SELECT status FROM edges WHERE id=?", (edge_id,)).fetchone()
+        return row["status"] if row else None
 
     def edge_exists(self, src: str, dst: str) -> bool:
         row = self.db.execute(
@@ -811,6 +886,27 @@ class Store:
         self.db.execute("UPDATE skills SET status=? WHERE id=?", (status, skill_id))
         self.db.commit()
 
+    # -- 스킬 <-> 엣지 출처 링크 (Phase 0: D-3 전제) ----------------------
+    def clear_skill_edges(self, skill_id: int) -> None:
+        self.db.execute("DELETE FROM skill_edges WHERE skill_id=?", (skill_id,))
+        self.db.commit()
+
+    def link_skill_edge(self, skill_id: int, edge_id: int, role: str, turn: int) -> None:
+        self.db.execute(
+            """INSERT OR IGNORE INTO skill_edges(skill_id, edge_id, role, created_turn)
+               VALUES (?,?,?,?)""", (skill_id, edge_id, role, turn))
+        self.db.commit()
+
+    def skill_support_edge_ids(self, skill_id: int) -> list[int]:
+        rows = self.db.execute(
+            "SELECT edge_id FROM skill_edges WHERE skill_id=?", (skill_id,)).fetchall()
+        return [r["edge_id"] for r in rows]
+
+    def skills_depending_on(self, edge_id: int) -> list[int]:
+        rows = self.db.execute(
+            "SELECT skill_id FROM skill_edges WHERE edge_id=?", (edge_id,)).fetchall()
+        return [r["skill_id"] for r in rows]
+
     def pin_skill(self, name: str, pinned: bool = True) -> None:
         self.db.execute("UPDATE skills SET pinned=? WHERE name=?", (int(pinned), name))
         self.db.commit()
@@ -821,7 +917,7 @@ class Store:
 
 ---
 
-## 8. `chiron/llm.py`
+## 9. `chiron/llm.py`
 
 ````python
 """LLM 추상화 계층.
@@ -1008,7 +1104,7 @@ def build_llm(cfg) -> LLMClient:
 
 ---
 
-## 9. `chiron/metacognition.py`
+## 10. `chiron/metacognition.py`
 
 ````python
 """메타인지 (agi 쪽): 자기 모니터링 + 목표 생성.
@@ -1049,7 +1145,7 @@ class MetaCognition:
 
 ---
 
-## 10. `chiron/evolution.py`
+## 11. `chiron/evolution.py`
 
 ````python
 """진화 루프 (agi 쪽): 열려 있는 목표를 위해 자율적으로 지식을 수집한다.
@@ -1101,7 +1197,7 @@ class EvolutionLoop:
 
 ---
 
-## 11. `chiron/corrector.py`
+## 12. `chiron/corrector.py`
 
 ````python
 """Corrector (agi 쪽): 검증 게이트.
@@ -1175,7 +1271,7 @@ class Corrector:
 
 ---
 
-## 12. `chiron/emergence.py`
+## 13. `chiron/emergence.py`
 
 ````python
 """창발 탐지기 (agi 쪽): *새로운* 인과 경로를 발견한다.
@@ -1236,7 +1332,7 @@ class EmergenceDetector:
 
 ---
 
-## 13. `chiron/promotion.py`
+## 14. `chiron/promotion.py`
 
 ````python
 """승격 (융합 지점): 검증된 선언적 지식을 절차적 스킬로 전환한다.
@@ -1312,7 +1408,13 @@ class Promoter:
             facts = [(e.src_name, e.relation, e.dst_name) for e in chain]
             name = _slug(head)
             body = self.llm.synthesize_skill(head, facts)
-            self.store.upsert_skill(name, body, origin="promoted", turn=turn)
+            skill_id = self.store.upsert_skill(name, body, origin="promoted", turn=turn)
+            # Phase 0: 스킬이 어떤 검증 엣지에서 나왔는지 구조적으로 기록한다.
+            # 재승격 시 링크를 현재 사슬과 일치하도록 새로 고친다 (오래된 링크 제거).
+            self.store.clear_skill_edges(skill_id)
+            for e in chain:
+                role = "head" if e.src_name == head else "support"
+                self.store.link_skill_edge(skill_id, e.id, role, turn)
             self.store.record_validation("promotion", self.store.node_id(head),
                                          "approve", f"{len(chain)} validated edges", avg_conf)
             promoted.append(name)
@@ -1324,7 +1426,59 @@ class Promoter:
 
 ---
 
-## 14. `chiron/curator.py`
+## 15. `chiron/reconciler.py`
+
+````python
+"""Reconciler (Phase 1: D-3 본체): 지식이 바뀌면 행동이 따라오게 한다.
+
+승격(promotion)은 단방향 다리였다 — 한번 검증된 사슬에서 스킬이 나오면, 나중에 그
+근거 엣지가 rejected로 뒤집혀도 스킬을 끌어내릴 방법이 없었다(자가 진화 시스템의
+자기모순). Reconciler가 그 역방향을 채운다:
+
+  근거 엣지가 더 이상 충분히 살아있지(validated) 않으면 → 해당 스킬을 **철회(retract)**한다.
+
+핵심 불변식은 그대로 지킨다 — 철회는 삭제가 아니라 보관(archive)이다. origin은 보존되고,
+철회 사유가 감사 로그(validations: 'retraction')에 남으며, `skills(include_archived=True)`
+로 언제든 복구 가능하다.
+
+근거 링크(skill_edges)가 없는 스킬(foreground / background_review / curated 중 직접
+저작된 것)은 자연히 대상에서 빠진다 — 이 모듈은 *지식에서 파생된* 스킬만 다룬다.
+"""
+
+from __future__ import annotations
+
+from .store import Store
+from .config import Config
+
+
+class Reconciler:
+    def __init__(self, store: Store, cfg: Config):
+        self.store = store
+        self.cfg = cfg
+
+    def reconcile(self) -> dict:
+        """살아있는 근거가 임계 미만으로 떨어진 파생 스킬을 철회(archive)한다."""
+        retracted: list[str] = []
+        for s in self.store.skills():  # 보관되지 않은 스킬만
+            support_ids = self.store.skill_support_edge_ids(s["id"])
+            if not support_ids:
+                continue  # 지식에서 파생되지 않은 스킬 — 대상 아님
+            live = [eid for eid in support_ids
+                    if self.store.edge_status(eid) == "validated"]
+            if len(live) < self.cfg.promote_min_validated_edges:
+                self.store.set_skill_status(s["id"], "archived")  # 삭제 아님, 복구 가능
+                self.store.record_validation(
+                    "retraction", s["id"], "archive",
+                    f"근거 약화: {len(live)}/{len(support_ids)} 엣지만 validated", 0.0)
+                retracted.append(s["name"])
+        if retracted:
+            self.store.log("reconcile.run", f"retracted: {', '.join(retracted)}")
+        return {"retracted": retracted}
+````
+
+---
+
+## 16. `chiron/curator.py`
 
 ````python
 """Curator (hermes 쪽): 스킬의 생명주기 + 통합.
@@ -1368,6 +1522,12 @@ class Curator:
         for s in self.store.skills():
             if s["pinned"]:
                 continue
+            # D-5 가드: 아직 소비 채널(action router)이 붙기 전이라 사용 신호가 없다.
+            # 한 번도 쓰인 적 없는 승격 스킬을 idle만으로 archive하면 라이브러리가
+            # 스스로를 지운다. 소비된 적 없는 promoted 스킬은 노후화 대상에서 제외한다.
+            # (지식이 바뀌어 끌어내려야 하는 경우는 Reconciler가 따로 처리한다.)
+            if s["origin"] == "promoted" and s["uses"] == 0:
+                continue
             idle = turn - s["last_used_turn"]
             if idle >= self.cfg.archive_after_uses_idle and s["status"] != "archived":
                 self.store.set_skill_status(s["id"], "archived")  # 삭제 아님, 복구 가능
@@ -1396,7 +1556,14 @@ class Curator:
                           "_통합된 umbrella. 출처(provenance): curated._", ""]
             for m in members:
                 body_parts.append(f"## {m['name']}\n\n{m['body']}\n")
-            self.store.upsert_skill(umbrella, "\n".join(body_parts), origin="curated", turn=turn)
+            umbrella_id = self.store.upsert_skill(
+                umbrella, "\n".join(body_parts), origin="curated", turn=turn)
+            # 출처 링크 전파: 흡수된 형제들의 근거 엣지를 umbrella에 이어 붙인다.
+            # 그래야 Reconciler가 통합된 스킬도 지식 변화에 따라 철회할 수 있다.
+            self.store.clear_skill_edges(umbrella_id)
+            for m in members:
+                for eid in self.store.skill_support_edge_ids(m["id"]):
+                    self.store.link_skill_edge(umbrella_id, eid, "support", turn)
             # 이제 흡수된 형제들을 보관(archive)한다 (복구 가능)
             for m in members:
                 if m["name"] != umbrella:
@@ -1407,7 +1574,7 @@ class Curator:
 
 ---
 
-## 15. `chiron/orchestrator.py`
+## 17. `chiron/orchestrator.py`
 
 ````python
 """Orchestrator: 폐쇄형 자가 진화 루프.
@@ -1440,6 +1607,7 @@ from .evolution import EvolutionLoop, KnowledgeSource
 from .corrector import Corrector
 from .emergence import EmergenceDetector
 from .promotion import Promoter
+from .reconciler import Reconciler
 from .curator import Curator
 
 
@@ -1456,6 +1624,7 @@ class Orchestrator:
         self.corrector = Corrector(self.store, self.cfg, self.llm)
         self.emergence = EmergenceDetector(self.store, self.cfg)
         self.promoter = Promoter(self.store, self.cfg, self.llm)
+        self.reconciler = Reconciler(self.store, self.cfg)
         self.curator = Curator(self.store, self.cfg, self.llm)
         self.turn = 0
         # 백그라운드 리뷰가 스킬을 쓰고자 할 때 발동되는 선택적 훅
@@ -1492,6 +1661,9 @@ class Orchestrator:
         emerged = self.emergence.discover()
         v2 = self.corrector.verify_pending()
         promoted = self.promoter.promote(self.turn)
+        # 지식이 바뀌었으니(이번 사이클의 기각 포함) 파생 스킬을 정합화한다.
+        # 철회된 지식이 umbrella로 통합되지 않도록 curator보다 먼저 실행한다.
+        reconciled = self.reconciler.reconcile()
         curated = self.curator.run(self.turn)
         report = {
             "turn": self.turn,
@@ -1500,6 +1672,7 @@ class Orchestrator:
             "rejected": v1["rejected"] + v2["rejected"],
             "emergent": emerged["discovered"],
             "promoted_skills": promoted["promoted"],
+            "retracted_skills": reconciled["retracted"],
             "curator": curated,
         }
         self.store.log("evolve.cycle", str(report))
@@ -1522,7 +1695,7 @@ class Orchestrator:
 
 ---
 
-## 16. `examples/demo.py`
+## 18. `examples/demo.py`
 
 ````python
 """Chiron 하이브리드 자가 진화 루프의 오프라인 엔드투엔드 데모.
@@ -1627,11 +1800,29 @@ def main() -> None:
     orch.evolution.run_once()
     stats = orch.corrector.verify_pending()
     print(f"  corrector 판정: {stats}")
-    print("  (coral bleaching -> big bang 은 기각됨: 결과가 우주의 기원보다 먼저 올 수 없음)")
+    print("  (coral bleaching -> big bang 은 기각됨)")
+    print("  ※ 솔직한 라벨(D-6): 이 기각은 StubLLM의 하드코딩 예시다. 게이트의 진짜")
+    print("    변별력은 실제 LLM/독립 증거원(예: PMI prior)을 연결해야 발휘된다 — Phase 2 과제.")
 
     banner("PHASE 4 — 승격 + curator 통합")
     orch.promoter.promote(orch.turn)
+    orch.reconciler.reconcile()
     orch.curator.run(orch.turn)
+
+    banner("PHASE 5 — 강등/철회: 지식이 바뀌면 행동도 따라온다 (D-3)")
+    target = "knowledge-umbrella"
+    row = next((s for s in orch.store.skills() if s["name"] == target), None)
+    if row:
+        support = orch.store.skill_support_edge_ids(row["id"])
+        print(f"  '{target}' 상태: active  (근거 엣지 {len(support)}개와 구조적으로 연결됨)")
+        # 나중에 반증이 나와 근거 엣지들이 뒤집혔다고 가정한다.
+        for eid in support:
+            orch.store.set_edge_status(eid, "rejected")
+        result = orch.reconciler.reconcile()
+        after = next((s for s in orch.store.skills(include_archived=True)
+                      if s["name"] == target), None)
+        print(f"  근거 엣지를 rejected로 전이 후 reconcile() -> 철회: {result['retracted']}")
+        print(f"  '{target}' 상태: {after['status']}  (삭제 아님 — include_archived로 복구 가능)")
 
     banner("최종 스냅샷")
     snap = orch.snapshot()
@@ -1645,7 +1836,8 @@ def main() -> None:
     print("   * 'knowledge-*' 스킬은 검증된 그래프 지식에서 승격(PROMOTED)되었다 (agi -> hermes).")
     print("   * 'debugging-flaky-tests' 는 hermes식 백그라운드 리뷰에서 나왔다.")
     print("   * 형제 스킬들은 curator에 의해 '*-umbrella' 아래로 통합되었다.")
-    print("   * 그 무엇도 삭제되지 않았다 — 흡수된 스킬은 'archived'로 복구 가능하다.")
+    print("   * 근거가 뒤집힌 스킬은 Reconciler가 '철회'했다 (지식 변화 -> 행동 변화, D-3).")
+    print("   * 그 무엇도 삭제되지 않았다 — 흡수/철회된 스킬은 'archived'로 복구 가능하다.")
 
     orch.close()
 
@@ -1656,7 +1848,7 @@ if __name__ == "__main__":
 
 ---
 
-## 17. `tests/test_smoke.py`
+## 19. `tests/test_smoke.py`
 
 ````python
 """Chiron 하이브리드 루프의 스모크 테스트. 실행: python -m pytest -q  (또는
@@ -1746,6 +1938,61 @@ def test_provenance_origins_present():
     origins = {s["origin"] for s in orch.store.skills(include_archived=True)}
     assert "promoted" in origins
     assert "background_review" in origins
+    orch.close()
+
+
+def test_skill_has_edge_provenance():
+    # Phase 0: 승격된 스킬에서 근거 엣지 id 집합을 1쿼리로 역추적 가능해야 한다
+    orch = make_orch()
+    orch.store.record_gap("typhoon")
+    orch.evolve()
+    promoted = [s for s in orch.store.skills() if s["origin"] == "promoted"]
+    assert promoted, "승격된 스킬이 있어야 함"
+    for s in promoted:
+        edge_ids = orch.store.skill_support_edge_ids(s["id"])
+        assert len(edge_ids) >= 1
+        # 링크가 가리키는 엣지는 실재해야 한다
+        assert all(orch.store.edge_status(eid) is not None for eid in edge_ids)
+    orch.close()
+
+
+def test_retraction_archives_skill():
+    # Phase 1: 근거 엣지가 rejected로 바뀌면 파생 스킬이 자동 철회(archive)된다
+    orch = make_orch()
+    orch.store.record_gap("typhoon")
+    orch.evolve()
+    skill = next(s for s in orch.store.skills() if s["origin"] == "promoted")
+    for eid in orch.store.skill_support_edge_ids(skill["id"]):
+        orch.store.set_edge_status(eid, "rejected")
+    result = orch.reconciler.reconcile()
+    assert skill["name"] in result["retracted"]
+    # 활성 목록에서는 빠지지만
+    assert skill["name"] not in [s["name"] for s in orch.store.skills()]
+    # 보관본으로는 여전히 복구 가능해야 한다
+    assert skill["name"] in [s["name"] for s in orch.store.skills(include_archived=True)]
+    orch.close()
+
+
+def test_promoted_skill_not_idle_archived_without_use():
+    # Phase 1 (D-5 가드): 소비된 적 없는 promoted 스킬은 idle만으로 archive되지 않는다
+    orch = make_orch()
+    orch.store.record_gap("typhoon")
+    orch.evolve()
+    skill = next(s for s in orch.store.skills() if s["origin"] == "promoted")
+    orch.turn = 9999  # 강제로 한참 미사용 상태로
+    orch.curator.run(orch.turn)
+    active = [s["name"] for s in orch.store.skills()]
+    assert skill["name"] in active, "사용 신호 없는 승격 스킬이 idle로 archive되면 안 됨"
+    orch.close()
+
+
+def test_non_derived_skill_survives_reconcile():
+    # Reconciler는 지식에서 파생되지 않은(근거 링크 없는) 스킬은 건드리지 않는다
+    orch = make_orch()
+    orch.store.upsert_skill("manual-note", "body", origin="foreground", turn=1)
+    result = orch.reconciler.reconcile()
+    assert "manual-note" not in result["retracted"]
+    assert "manual-note" in [s["name"] for s in orch.store.skills()]
     orch.close()
 
 

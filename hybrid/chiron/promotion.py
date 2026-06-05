@@ -71,7 +71,13 @@ class Promoter:
             facts = [(e.src_name, e.relation, e.dst_name) for e in chain]
             name = _slug(head)
             body = self.llm.synthesize_skill(head, facts)
-            self.store.upsert_skill(name, body, origin="promoted", turn=turn)
+            skill_id = self.store.upsert_skill(name, body, origin="promoted", turn=turn)
+            # Phase 0: 스킬이 어떤 검증 엣지에서 나왔는지 구조적으로 기록한다.
+            # 재승격 시 링크를 현재 사슬과 일치하도록 새로 고친다 (오래된 링크 제거).
+            self.store.clear_skill_edges(skill_id)
+            for e in chain:
+                role = "head" if e.src_name == head else "support"
+                self.store.link_skill_edge(skill_id, e.id, role, turn)
             self.store.record_validation("promotion", self.store.node_id(head),
                                          "approve", f"{len(chain)} validated edges", avg_conf)
             promoted.append(name)

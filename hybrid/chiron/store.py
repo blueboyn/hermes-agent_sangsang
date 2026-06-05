@@ -71,6 +71,13 @@ CREATE TABLE IF NOT EXISTS skills (
     last_used_turn INTEGER NOT NULL DEFAULT 0,
     created_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS skill_edges (
+    skill_id INTEGER NOT NULL,
+    edge_id INTEGER NOT NULL,
+    role TEXT NOT NULL DEFAULT 'support',   -- 근거|머리  (support|head)
+    created_turn INTEGER NOT NULL,
+    PRIMARY KEY (skill_id, edge_id)
+);
 CREATE TABLE IF NOT EXISTS validations (
     id INTEGER PRIMARY KEY,
     target_type TEXT NOT NULL,      -- 엣지|승격  (edge|promotion)
@@ -167,6 +174,10 @@ class Store:
                 WHERE ns.name=? {clause}""", (name,)).fetchall()
         return [Edge(r["id"], r["src"], r["dst"], r["relation"], r["strength"],
                      r["confidence"], r["status"], r["origin"]) for r in rows]
+
+    def edge_status(self, edge_id: int) -> str | None:
+        row = self.db.execute("SELECT status FROM edges WHERE id=?", (edge_id,)).fetchone()
+        return row["status"] if row else None
 
     def edge_exists(self, src: str, dst: str) -> bool:
         row = self.db.execute(
@@ -271,6 +282,27 @@ class Store:
     def set_skill_status(self, skill_id: int, status: str) -> None:
         self.db.execute("UPDATE skills SET status=? WHERE id=?", (status, skill_id))
         self.db.commit()
+
+    # -- 스킬 <-> 엣지 출처 링크 (Phase 0: D-3 전제) ----------------------
+    def clear_skill_edges(self, skill_id: int) -> None:
+        self.db.execute("DELETE FROM skill_edges WHERE skill_id=?", (skill_id,))
+        self.db.commit()
+
+    def link_skill_edge(self, skill_id: int, edge_id: int, role: str, turn: int) -> None:
+        self.db.execute(
+            """INSERT OR IGNORE INTO skill_edges(skill_id, edge_id, role, created_turn)
+               VALUES (?,?,?,?)""", (skill_id, edge_id, role, turn))
+        self.db.commit()
+
+    def skill_support_edge_ids(self, skill_id: int) -> list[int]:
+        rows = self.db.execute(
+            "SELECT edge_id FROM skill_edges WHERE skill_id=?", (skill_id,)).fetchall()
+        return [r["edge_id"] for r in rows]
+
+    def skills_depending_on(self, edge_id: int) -> list[int]:
+        rows = self.db.execute(
+            "SELECT skill_id FROM skill_edges WHERE edge_id=?", (edge_id,)).fetchall()
+        return [r["skill_id"] for r in rows]
 
     def pin_skill(self, name: str, pinned: bool = True) -> None:
         self.db.execute("UPDATE skills SET pinned=? WHERE name=?", (int(pinned), name))

@@ -39,6 +39,12 @@ class Curator:
         for s in self.store.skills():
             if s["pinned"]:
                 continue
+            # D-5 가드: 아직 소비 채널(action router)이 붙기 전이라 사용 신호가 없다.
+            # 한 번도 쓰인 적 없는 승격 스킬을 idle만으로 archive하면 라이브러리가
+            # 스스로를 지운다. 소비된 적 없는 promoted 스킬은 노후화 대상에서 제외한다.
+            # (지식이 바뀌어 끌어내려야 하는 경우는 Reconciler가 따로 처리한다.)
+            if s["origin"] == "promoted" and s["uses"] == 0:
+                continue
             idle = turn - s["last_used_turn"]
             if idle >= self.cfg.archive_after_uses_idle and s["status"] != "archived":
                 self.store.set_skill_status(s["id"], "archived")  # 삭제 아님, 복구 가능
@@ -67,7 +73,14 @@ class Curator:
                           "_통합된 umbrella. 출처(provenance): curated._", ""]
             for m in members:
                 body_parts.append(f"## {m['name']}\n\n{m['body']}\n")
-            self.store.upsert_skill(umbrella, "\n".join(body_parts), origin="curated", turn=turn)
+            umbrella_id = self.store.upsert_skill(
+                umbrella, "\n".join(body_parts), origin="curated", turn=turn)
+            # 출처 링크 전파: 흡수된 형제들의 근거 엣지를 umbrella에 이어 붙인다.
+            # 그래야 Reconciler가 통합된 스킬도 지식 변화에 따라 철회할 수 있다.
+            self.store.clear_skill_edges(umbrella_id)
+            for m in members:
+                for eid in self.store.skill_support_edge_ids(m["id"]):
+                    self.store.link_skill_edge(umbrella_id, eid, "support", turn)
             # 이제 흡수된 형제들을 보관(archive)한다 (복구 가능)
             for m in members:
                 if m["name"] != umbrella:

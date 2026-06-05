@@ -28,6 +28,7 @@ from .evolution import EvolutionLoop, KnowledgeSource
 from .corrector import Corrector
 from .emergence import EmergenceDetector
 from .promotion import Promoter
+from .reconciler import Reconciler
 from .curator import Curator
 
 
@@ -44,6 +45,7 @@ class Orchestrator:
         self.corrector = Corrector(self.store, self.cfg, self.llm)
         self.emergence = EmergenceDetector(self.store, self.cfg)
         self.promoter = Promoter(self.store, self.cfg, self.llm)
+        self.reconciler = Reconciler(self.store, self.cfg)
         self.curator = Curator(self.store, self.cfg, self.llm)
         self.turn = 0
         # 백그라운드 리뷰가 스킬을 쓰고자 할 때 발동되는 선택적 훅
@@ -80,6 +82,9 @@ class Orchestrator:
         emerged = self.emergence.discover()
         v2 = self.corrector.verify_pending()
         promoted = self.promoter.promote(self.turn)
+        # 지식이 바뀌었으니(이번 사이클의 기각 포함) 파생 스킬을 정합화한다.
+        # 철회된 지식이 umbrella로 통합되지 않도록 curator보다 먼저 실행한다.
+        reconciled = self.reconciler.reconcile()
         curated = self.curator.run(self.turn)
         report = {
             "turn": self.turn,
@@ -88,6 +93,7 @@ class Orchestrator:
             "rejected": v1["rejected"] + v2["rejected"],
             "emergent": emerged["discovered"],
             "promoted_skills": promoted["promoted"],
+            "retracted_skills": reconciled["retracted"],
             "curator": curated,
         }
         self.store.log("evolve.cycle", str(report))
