@@ -1,14 +1,15 @@
-"""Corrector (agi-side): the validation gate.
+"""Corrector (agi 쪽): 검증 게이트.
 
-This is the single most important inherited idea from agi: *new knowledge is a
-hypothesis until proven*. Every hypothesis/emergent edge is checked — cheaply
-rejected if below the confidence floor, otherwise judged by the LLM. Verdicts:
+agi로부터 물려받은 가장 중요한 발상이다: *새 지식은 증명되기 전까지 가설이다.* 모든
+가설/창발 엣지가 검사된다 — 신뢰도 하한 미달이면 값싸게 기각하고, 아니면 LLM이 판정한다.
+판정(verdict):
 
-  * valid     -> status 'validated'   (eligible for promotion to a skill)
-  * doubtful  -> stays 'doubtful', retried up to N times, then auto-rejected
-  * rejected  -> status 'rejected'    (kept for audit, never silently dropped)
+  * valid     -> 상태 'validated'  (스킬로의 승격 자격 획득)
+  * doubtful  -> 'doubtful' 유지, N회까지 재시도 후 자동 기각
+  * rejected  -> 상태 'rejected'   (감사를 위해 보존, 절대 조용히 버리지 않음)
 
-Doubt-tracking is in-memory per run, matching agi's "max 3 re-verifications".
+의심 추적(doubt-tracking)은 실행 단위의 메모리에서 이뤄지며, agi의 "최대 3회 재검증"과
+일치한다.
 """
 
 from __future__ import annotations
@@ -28,15 +29,15 @@ class Corrector:
         self._doubt_counts: dict[int, int] = defaultdict(int)
 
     def verify_pending(self) -> dict:
-        """Validate every hypothesis + doubtful edge currently in the graph."""
+        """현재 그래프에 있는 모든 가설 + 의심 엣지를 검증한다."""
         pending = self.store.edges_by_status("hypothesis") + self.store.edges_by_status("doubtful")
         stats = {"validated": 0, "rejected": 0, "doubtful": 0}
         for e in pending:
-            # cheap floor check before spending an LLM call (agi optimisation)
+            # LLM 호출 전 값싼 하한 검사 (agi의 최적화)
             if e.confidence < self.cfg.validate_min_confidence:
                 self.store.set_edge_status(e.id, "rejected")
                 self.store.record_validation("edge", e.id, "rejected",
-                                             "below confidence floor", e.confidence)
+                                             "신뢰도 하한 미달", e.confidence)
                 stats["rejected"] += 1
                 continue
 
@@ -51,7 +52,7 @@ class Corrector:
                 if self._doubt_counts[e.id] >= self.cfg.doubtful_max_retries:
                     self.store.set_edge_status(e.id, "rejected")
                     self.store.record_validation("edge", e.id, "rejected",
-                                                 "exhausted doubt retries", v.confidence)
+                                                 "의심 재시도 횟수 소진", v.confidence)
                     stats["rejected"] += 1
                 else:
                     self.store.set_edge_status(e.id, "doubtful")

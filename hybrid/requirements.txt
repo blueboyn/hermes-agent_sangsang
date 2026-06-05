@@ -1,8 +1,8 @@
-# Chiron runs on the Python standard library alone (sqlite3, dataclasses, ...).
-# No third-party packages are required for the offline demo or the test suite.
+# Chiron은 파이썬 표준 라이브러리만으로 동작한다 (sqlite3, dataclasses, ...).
+# 오프라인 데모와 테스트 스위트에 필요한 서드파티 패키지는 없다.
 #
-# Optional, only if you wire a real LLM via CHIRON_LLM=openai:
-#   - nothing extra: the OpenAI-compatible client uses urllib from the stdlib.
+# 선택 사항: CHIRON_LLM=openai 로 실제 LLM을 연결할 때
+#   - 추가 패키지 불필요: OpenAI 호환 클라이언트는 표준 라이브러리의 urllib을 사용한다.
 #
-# Optional dev tooling:
-# pytest>=7.0    # `pytest -q` also runs tests/test_smoke.py
+# 선택적 개발 도구:
+# pytest>=7.0    # `pytest -q` 로도 tests/test_smoke.py 가 실행된다

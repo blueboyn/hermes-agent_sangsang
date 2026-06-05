@@ -1,8 +1,8 @@
-"""Meta-cognition (agi-side): self-monitoring + goal generation.
+"""메타인지 (agi 쪽): 자기 모니터링 + 목표 생성.
 
-Watches the agent's own capability stats and unmet knowledge gaps, then turns
-weaknesses into prioritized learning goals. This is the "무위자연 / let the data
-tell you what to learn" half of the loop.
+에이전트 자신의 능력 통계와 해소되지 않은 지식 공백을 지켜보다가, 약점을 우선순위가
+매겨진 학습 목표로 전환한다. 이것이 루프의 "무위자연 / 데이터가 무엇을 배워야 할지
+알려주게 둔다" 절반에 해당한다.
 """
 
 from __future__ import annotations
@@ -20,10 +20,10 @@ class MetaCognition:
         self.store.record_capability(action, success, confidence)
 
     def update_goals(self) -> int:
-        """Recompute the active goal set from gaps + capability weaknesses."""
+        """공백 + 능력 약점으로부터 활성 목표 집합을 재계산한다."""
         created = 0
         for keyword, hits in self.store.active_gaps(self.cfg.gap_promote_hits):
-            # priority scales with how often the gap has been hit
+            # 우선순위는 공백이 얼마나 자주 부딪혔는지에 비례한다
             self.store.upsert_goal("KNOWLEDGE_GAP", keyword, priority=min(hits, 10))
             created += 1
         for action in self.store.weaknesses(self.cfg.weak_success_rate, self.cfg.weak_confidence):

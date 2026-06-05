@@ -1,10 +1,9 @@
-"""Evolution loop (agi-side): autonomously acquire knowledge for open goals.
+"""진화 루프 (agi 쪽): 열려 있는 목표를 위해 자율적으로 지식을 수집한다.
 
-In the real agi system this reaches out to arXiv / Wikipedia and runs the text
-through an extraction pipeline. Here the "acquirer" is pluggable: the demo
-supplies a knowledge source that returns arrow-notation seed text, which the
-LLM turns into causal edges. Acquired edges enter as *hypotheses* — they are
-NOT trusted until the corrector validates them.
+실제 agi 시스템에서는 arXiv / 위키피디아로 나가서 텍스트를 추출 파이프라인에 통과시킨다.
+여기서는 "수집기(acquirer)"가 교체 가능하다: 데모는 화살표 표기 시드 텍스트를 돌려주는
+지식 소스를 공급하고, LLM이 이를 인과 엣지로 변환한다. 수집된 엣지는 *가설(hypothesis)*
+로 들어온다 — corrector가 검증하기 전까지는 신뢰되지 않는다.
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ from .store import Store
 from .config import Config
 from .llm import LLMClient
 
-# A knowledge source maps a topic -> raw text to be mined for facts.
+# 지식 소스: 주제(topic) -> 사실을 캐낼 원시 텍스트
 KnowledgeSource = Callable[[str], str]
 
 

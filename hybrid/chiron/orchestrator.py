@@ -1,20 +1,19 @@
-"""Orchestrator: the closed self-evolution loop.
+"""Orchestrator: 폐쇄형 자가 진화 루프.
 
-Combines both parents' loops on two timescales:
+두 부모의 루프를 두 가지 시간 척도(timescale)에서 결합한다:
 
-  Per-turn (hermes' immediate review + agi's monitoring)
-    observe()  -> record capability, detect knowledge gaps
-    nudge      -> every N turns, run background skill review
+  턴 단위 (hermes의 즉시 리뷰 + agi의 모니터링)
+    observe()  -> 능력 기록, 지식 공백 탐지
+    nudge      -> N턴마다 백그라운드 스킬 리뷰 실행
 
-  Periodic (agi's evolution/emergence + hermes' curation)
-    evolve()   -> meta-cognition goals -> acquire knowledge (hypotheses)
-               -> corrector validates -> emergence discovers -> corrector again
-               -> promote validated knowledge into skills
-               -> curator consolidates / ages skills
+  주기 단위 (agi의 진화/창발 + hermes의 큐레이션)
+    evolve()   -> 메타인지 목표 -> 지식 수집(가설)
+               -> corrector 검증 -> 창발 발견 -> corrector 재검증
+               -> 검증된 지식을 스킬로 승격
+               -> curator가 스킬을 통합/노후화
 
-`tick()` advances the turn counter and fires whatever is due. The demo drives
-this; in production the periodic half would run on hermes' idle-triggered
-background fork.
+`tick()`은 턴 카운터를 진행시키며 도래한 작업을 발동한다. 데모가 이를 구동한다.
+실제 운영에서는 주기 단위 절반이 hermes의 idle 트리거 백그라운드 fork 위에서 돌게 된다.
 """
 
 from __future__ import annotations
@@ -47,13 +46,13 @@ class Orchestrator:
         self.promoter = Promoter(self.store, self.cfg, self.llm)
         self.curator = Curator(self.store, self.cfg, self.llm)
         self.turn = 0
-        # optional hook fired when the background review wants to write a skill
+        # 백그라운드 리뷰가 스킬을 쓰고자 할 때 발동되는 선택적 훅
         self.background_review: Callable[[int], None] | None = None
 
-    # -- per-turn ---------------------------------------------------------
+    # -- 턴 단위 ----------------------------------------------------------
     def observe(self, action: str, success: bool, confidence: float,
                 unknown_terms: list[str] | None = None) -> None:
-        """Record one interaction outcome and any knowledge gaps it exposed."""
+        """하나의 상호작용 결과와 그것이 드러낸 지식 공백을 기록한다."""
         self.turn += 1
         self.meta.record(action, success, confidence)
         for term in (unknown_terms or []):
@@ -64,18 +63,17 @@ class Orchestrator:
             self.meta.update_goals()
         if self.cfg.skill_nudge_interval and self.turn % self.cfg.skill_nudge_interval == 0:
             if self.background_review:
-                self.background_review(self.turn)  # hermes-style immediate review
+                self.background_review(self.turn)  # hermes식 즉시 리뷰
         if self.turn % self.cfg.auto_evolve_every == 0:
             self.evolve()
 
     def use_skill(self, name: str) -> bool:
-        """Mark a skill as used (keeps it out of the stale/archive path)."""
+        """스킬을 사용됨으로 표시한다 (stale/archive 경로에서 벗어나게 함)."""
         return self.store.touch_skill(name, self.turn)
 
-    # -- periodic ---------------------------------------------------------
+    # -- 주기 단위 --------------------------------------------------------
     def evolve(self) -> dict:
-        """One full evolution cycle: acquire -> validate -> discover ->
-        validate -> promote -> curate."""
+        """하나의 완전한 진화 사이클: 수집 -> 검증 -> 발견 -> 검증 -> 승격 -> 큐레이션."""
         self.meta.update_goals()
         acquired = self.evolution.run_once()
         v1 = self.corrector.verify_pending()
@@ -95,7 +93,7 @@ class Orchestrator:
         self.store.log("evolve.cycle", str(report))
         return report
 
-    # -- introspection ----------------------------------------------------
+    # -- 내부 상태 조회 ---------------------------------------------------
     def snapshot(self) -> dict:
         skills = self.store.skills(include_archived=True)
         return {

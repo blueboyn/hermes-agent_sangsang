@@ -1,20 +1,18 @@
-"""Promotion (THE FUSION): turn validated declarative knowledge into procedural
-skills.
+"""승격 (융합 지점): 검증된 선언적 지식을 절차적 스킬로 전환한다.
 
-This module is the whole point of Chiron. agi grows a knowledge graph; hermes
-grows skills. Neither bridges the two. Promotion does:
+이 모듈이 Chiron의 핵심이다. agi는 지식 그래프를 키우고, hermes는 스킬을 키우지만,
+어느 쪽도 둘을 잇지 않는다. 승격은 다음을 수행한다:
 
-  1. Find each *chain head* — a topic that drives a causal chain (a node that is
-     a source but never a destination among validated edges).
-  2. Gather the whole reachable chain of *validated* edges from that head.
-  3. A head whose chain has enough validated, high-confidence edges is deemed a
-     stable, reusable pattern — not noise — and is synthesized into a SKILL.md.
-  4. The skill is written with provenance='promoted'.
+  1. 각 *사슬 머리(chain head)* — 인과 사슬을 이끄는 주제(검증된 엣지들 사이에서
+     출발점(source)이지만 도착점(destination)은 한 번도 되지 않는 노드) — 를 찾는다.
+  2. 그 머리로부터 도달 가능한 *검증된* 엣지의 사슬 전체를 모은다.
+  3. 사슬이 충분히 많고 신뢰도가 높은 검증 엣지를 가진 머리는 노이즈가 아니라 안정적이고
+     재사용 가능한 패턴으로 간주되어 SKILL.md로 합성된다.
+  4. 스킬은 origin='promoted'(승격)로 기록된다.
 
-So a fact only becomes a *skill* (a thing the agent will actually be guided by)
-after it survived the validation gate AND forms a recurring multi-step pattern.
-Knowledge may be wrong, but it can't silently steer behaviour until it has
-earned procedural status.
+따라서 하나의 사실은 (a) 검증 게이트를 통과하고 (b) 반복되는 다단계 패턴을 형성한
+뒤에야 비로소 *스킬*(에이전트가 실제로 따르게 되는 것)이 된다. 지식은 틀릴 수 있지만,
+절차적 지위를 얻기 전까지는 행동을 조용히 좌우할 수 없다.
 """
 
 from __future__ import annotations
@@ -35,7 +33,7 @@ class Promoter:
         self.llm = llm
 
     def _reachable_chain(self, head: str, by_src: dict[str, list[Edge]]) -> list[Edge]:
-        """All validated edges reachable from `head` (acyclic BFS)."""
+        """`head`로부터 도달 가능한 모든 검증 엣지 (비순환 BFS)."""
         seen_edges: list[Edge] = []
         visited_nodes = {head}
         frontier = [head]
@@ -59,7 +57,7 @@ class Promoter:
             sources.add(e.src_name)
             dests.add(e.dst_name)
 
-        # chain heads: drive a chain but aren't themselves a downstream effect
+        # 사슬 머리: 사슬을 이끌지만 자신은 하류 결과가 아닌 노드
         heads = sources - dests
         promoted = []
         for head in sorted(heads):

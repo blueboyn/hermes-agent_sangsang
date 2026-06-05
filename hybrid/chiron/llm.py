@@ -1,17 +1,17 @@
-"""LLM abstraction.
+"""LLM 추상화 계층.
 
-Chiron never calls a provider directly — it talks to an ``LLMClient``. Two
-implementations ship here:
+Chiron은 절대 공급자(provider)를 직접 호출하지 않는다 — 항상 ``LLMClient``와
+대화한다. 여기에는 두 가지 구현이 들어 있다:
 
-  * ``StubLLM`` — fully deterministic, offline. It lets the entire
-    self-evolution loop run (and be unit-tested) with no API key. It mimics the
-    *shape* of real responses: knowledge extraction, edge validation, skill
-    synthesis. Heuristics are intentionally simple but plausible.
-  * ``OpenAICompatibleLLM`` — a thin client for any OpenAI-compatible endpoint
-    (OpenRouter, LM Studio, Anthropic-compat, local). Used when configured.
+  * ``StubLLM`` — 완전히 결정론적이며 오프라인. API 키 없이도 전체 자가 진화 루프를
+    실행(및 단위 테스트)할 수 있게 해준다. 실제 응답의 *형태*를 모방한다: 지식 추출,
+    엣지 검증, 스킬 합성. 휴리스틱은 의도적으로 단순하지만 그럴듯하다.
+  * ``OpenAICompatibleLLM`` — OpenAI 호환 엔드포인트(OpenRouter, LM Studio,
+    Anthropic 호환, 로컬 등)를 위한 얇은 클라이언트. 설정되면 사용된다.
 
-This mirrors hermes' provider-agnostic design and agi's "graceful degradation":
-if no LLM is reachable, the stub keeps the loop alive.
+이는 hermes의 공급자 비종속(provider-agnostic) 설계와 agi의 "우아한 성능 저하
+(graceful degradation)"를 함께 반영한다: 도달 가능한 LLM이 없으면 stub이 루프를
+계속 살려둔다.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from typing import Protocol
 
 
 # ----------------------------------------------------------------------------
-# Structured response shapes (so callers never parse free text twice)
+# 구조화된 응답 형태 (호출자가 자유 텍스트를 두 번 파싱하지 않도록)
 # ----------------------------------------------------------------------------
 @dataclass
 class Fact:
@@ -50,20 +50,20 @@ class LLMClient(Protocol):
 
 
 # ----------------------------------------------------------------------------
-# Offline deterministic stub
+# 오프라인 결정론적 stub
 # ----------------------------------------------------------------------------
 _CAUSAL_HINTS = ("cause", "lead", "increase", "raise", "improve", "유발", "상승", "향상", "초래")
 _STOP = {"a", "an", "the", "of", "and", "to", "in", "is", "are", "그", "이", "수", "및"}
 
 
 class StubLLM:
-    """Deterministic stand-in. No network, no randomness."""
+    """결정론적 대역(stand-in). 네트워크도, 무작위성도 없다."""
 
     def extract_facts(self, topic: str, text: str) -> list[Fact]:
-        """Turn 'A -> B -> C' style seed text into causal edges.
+        """'A -> B -> C' 형태의 시드 텍스트를 인과 엣지로 변환한다.
 
-        The demo feeds simple arrow-notation 'knowledge'; real text would be
-        parsed by a real model. We keep extraction transparent for testing.
+        데모는 단순한 화살표 표기 '지식'을 공급한다. 실제 텍스트라면 진짜 모델이
+        파싱할 것이다. 테스트를 위해 추출 과정을 투명하게 유지한다.
         """
         facts: list[Fact] = []
         for line in text.splitlines():
@@ -73,37 +73,37 @@ class StubLLM:
             chain = [p.strip() for p in line.split("->") if p.strip()]
             for i in range(len(chain) - 1):
                 src, dst = chain[i], chain[i + 1]
-                # plausibility heuristic: shorter, content-bearing links score higher
+                # 그럴듯함 휴리스틱: 짧고 내용이 있는 링크일수록 높은 점수
                 conf = round(0.55 + 0.1 * min(len(src.split()), 3) / 3, 3)
                 facts.append(Fact(src=src, dst=dst, relation="causes",
                                   strength=0.7, confidence=conf))
         return facts
 
     def validate_edge(self, src: str, relation: str, dst: str, confidence: float) -> Verdict:
-        """Approve causal-looking, non-self edges; flag the rest as doubtful."""
+        """인과처럼 보이고 자기 자신이 아닌 엣지는 승인하고, 나머지는 의심으로 표시한다."""
         if src.lower() == dst.lower():
             return Verdict(False, "rejected", "self-loop", 0.95)
-        # reject obviously reversed temporal claims the stub can recognise
+        # stub이 인지할 수 있는 명백히 시간 역전된 주장은 기각한다
         if dst.lower() in {"big bang", "빅뱅"}:
-            return Verdict(False, "rejected", "effect precedes a cosmic origin", 0.9)
+            return Verdict(False, "rejected", "결과가 우주의 기원보다 먼저 올 수 없음", 0.9)
         if confidence >= 0.5:
-            return Verdict(True, "valid", "plausible causal mechanism", min(confidence + 0.1, 0.99))
+            return Verdict(True, "valid", "그럴듯한 인과 메커니즘", min(confidence + 0.1, 0.99))
         if confidence >= 0.35:
-            return Verdict(False, "doubtful", "weak signal, needs more evidence", confidence)
-        return Verdict(False, "rejected", "below confidence floor", confidence)
+            return Verdict(False, "doubtful", "신호가 약함, 추가 근거 필요", confidence)
+        return Verdict(False, "rejected", "신뢰도 하한 미달", confidence)
 
     def synthesize_skill(self, name: str, facts: list[tuple[str, str, str]]) -> str:
-        """Render validated facts into a procedural SKILL.md body."""
+        """검증된 사실들을 절차적 SKILL.md 본문으로 렌더링한다."""
         lines = [f"# {name}", "",
-                 "_Auto-promoted from validated knowledge. Provenance: promoted._", "",
-                 "## When to use", f"When reasoning about **{name}** or its consequences.", "",
-                 "## Known causal structure"]
+                 "_검증된 지식에서 자동 승격됨. 출처(provenance): promoted._", "",
+                 "## 언제 사용하나", f"**{name}** 또는 그 결과에 대해 추론할 때.", "",
+                 "## 알려진 인과 구조"]
         for src, rel, dst in facts:
             lines.append(f"- `{src}` {rel} `{dst}`")
-        lines += ["", "## Procedure",
-                  "1. Identify which known cause(s) above are present.",
-                  "2. Follow the chain to anticipate downstream effects.",
-                  "3. If a step is missing, file a knowledge gap and re-evaluate."]
+        lines += ["", "## 절차",
+                  "1. 위의 알려진 원인 중 무엇이 존재하는지 식별한다.",
+                  "2. 사슬을 따라가며 하류(downstream) 결과를 예측한다.",
+                  "3. 빠진 단계가 있으면 지식 공백으로 등록하고 재평가한다."]
         return "\n".join(lines)
 
     def name_umbrella(self, prefix: str, members: list[str]) -> str:
@@ -112,10 +112,10 @@ class StubLLM:
 
 
 # ----------------------------------------------------------------------------
-# Real provider (best-effort, optional dependency)
+# 실제 공급자 (최선 노력, 선택적 의존성)
 # ----------------------------------------------------------------------------
 class OpenAICompatibleLLM:
-    """Minimal OpenAI-compatible chat client. Falls back to StubLLM on any error."""
+    """최소한의 OpenAI 호환 chat 클라이언트. 오류 발생 시 StubLLM으로 폴백한다."""
 
     def __init__(self, base_url: str, api_key: str, model: str):
         self.base_url = base_url.rstrip("/")
