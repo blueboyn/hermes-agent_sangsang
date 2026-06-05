@@ -1,0 +1,8 @@
+# Chiron runs on the Python standard library alone (sqlite3, dataclasses, ...).
+# No third-party packages are required for the offline demo or the test suite.
+#
+# Optional, only if you wire a real LLM via CHIRON_LLM=openai:
+#   - nothing extra: the OpenAI-compatible client uses urllib from the stdlib.
+#
+# Optional dev tooling:
+# pytest>=7.0    # `pytest -q` also runs tests/test_smoke.py
